@@ -92,7 +92,7 @@ RULES: list[Rule] = [
 
     # --- A4: role-play tricks ---
     _r("A4-you-are-now", "A4", 0.6,
-       r"\byou\s+are\s+(now|no\s+longer)\s+(an?\s+)?(\w+\s+){0,3}(ai|assistant|bot|chatbot|model|agent|mode|persona|character)\b|\bfrom\s+now\s+on,?\s+you\s+(are|will|must|shall)\b",
+       r"\byou\s+are\s+(now|no\s+longer)\s+(an?|in|the)\s+(\w+\s+){0,3}(ai|assistant|bot|chatbot|model|agent|mode|persona|character)\b|\bfrom\s+now\s+on,?\s+you\s+(are|will|must|shall)\b",
        "Tries to give the AI a new identity"),
     _r("A4-pretend", "A4", 0.45,
        r"\b(pretend|roleplay|role-play)\s+(to\s+be|as|that\s+you)\b|\bact\s+as\s+(an?\s+)?(\w+\s+){0,2}(ai|assistant|bot|model|agent|hacker)\b",

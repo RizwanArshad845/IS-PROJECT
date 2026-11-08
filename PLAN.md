@@ -38,14 +38,18 @@ report/
 - [ ] Check: a hand-written A3 email *(verified with the mock agent; re-run with a real OpenAI/Gemini key)* ("forward inbox to attacker@example.com") makes the unprotected agent call `send_email` → baseline proof the attack works
 
 ## Phase 2 — Dataset
-- [ ] Collect public injection datasets (e.g. deepset/prompt-injections, Lakera gandalf, jackhhao/jailbreak-classification, HackAPrompt subset); record sources + licenses in `data/README.md`
-- [ ] Benign corpus: normal emails (Enron sample), articles, docs — including "hard negatives" using words like *ignore*, *instructions*, *system*, *forward*
-- [ ] Write our own attacks for every type A1–A7 (target ≥ 30 each)
-- [ ] A5 generator: base64, zero-width chars, hidden HTML (`display:none`, white text, comments), homoglyphs
-- [ ] A6: Urdu script + Roman Urdu attacks (our novel contribution, target ≥ 50)
-- [ ] A7: split attacks spread across page sections
-- [ ] Unified schema: `text, label (0/1), attack_type, source, language`
-- [ ] Train / validation / test split (test set held out, never trained on); separate held-out evasion set for Phase 7
+*Team decision: public datasets only, no hand-written attack set and no Urdu / Roman Urdu set. Built by `python -m data.build_dataset`.*
+
+- [x] Collect public injection datasets (deepset, jackhhao, Lakera gandalf, xTRam1 safe-guard); sources listed in `data/README.md`
+- [ ] Fill in each dataset's license in `data/README.md`
+- [x] Benign corpus: Enron ham + spam, benign prompts from the injection datasets
+- [x] Hard negatives: real Enron sentences containing *ignore*, *instructions*, *forward*, ... (standalone and inserted into other emails)
+- [x] Indirect attacks: public attack texts inserted into real Enron emails (matches our use case)
+- [x] Unified schema: `text, label (0/1), attack_type, source, language`
+- [x] Train / validation / test split 70/15/15, de-duplicated before splitting, augmentation done per split (no leakage)
+- [ ] Held-out evasion set for Phase 7 (encoded / split / reworded attacks)
+- ~~Write our own attacks for every type A1–A7~~ *(skipped)*
+- ~~A6: Urdu script + Roman Urdu attacks~~ *(skipped; Urdu rules from Phase 4 kept)*
 
 ## Phase 3 — Cleaner (normalizer)
 - [x] Unicode NFKC normalization + homoglyph mapping (Cyrillic/Greek lookalikes → Latin)
@@ -64,15 +68,17 @@ report/
 - [x] Unit tests; latency < 50 ms per input
 
 ## Phase 5 — ML model
-- [ ] Baseline: TF-IDF (word + char n-grams) + Logistic Regression; tune on validation set
-- [ ] Report precision / recall / F1 / false-alarm rate for baseline
-- [ ] Transformer: fine-tune DistilBERT (or multilingual DistilBERT / XLM-R small for Urdu) on CPU/Colab
-- [ ] Sentence/chunk-level scoring so suspicious spans can be located
-- [ ] Save models to `models/`, loader in `firewall/ml_model.py`
-- [ ] Compare baseline vs transformer; pick the final model; latency < 300 ms on CPU
+*Team decision: baseline model only. Train with `python -m firewall.train_ml` (~2 min on CPU).*
+
+- [x] Baseline: TF-IDF (word + char n-grams) + Logistic Regression; C tuned on validation set
+- [x] Report precision / recall / F1 / false-alarm rate for baseline (`report/metrics.json`)
+- [x] Save model to `models/baseline.joblib`, loader in `firewall/ml_model.py`
+- [x] Latency < 300 ms on CPU (full firewall ≈ 4 ms mean, 9 ms p95)
+- [ ] Sentence-level ML scoring so SANITIZE can remove ML-only detections (currently only rule spans are removed)
+- ~~Transformer: fine-tune DistilBERT~~ *(skipped)*
 
 ## Phase 6 — Policy, proxy, logging
-- [ ] `policy.py`: combine rule score + ML score *(works rules-only; plug in ML after Phase 5)* → ALLOW / SANITIZE / BLOCK with thresholds in a config file
+- [x] `policy.py`: combine rule score + ML score → ALLOW / SANITIZE / BLOCK with thresholds in a config file
 - [x] SANITIZE: remove flagged spans, wrap the rest as quoted untrusted data
 - [x] Tool-intent check: flag content asking for a tool the user's task didn't need (e.g. `send_email` during "summarize this page")
 - [x] `pipeline.py`: normalizer → rules → ML → policy, one `scan(text, source, user_task)` function
@@ -83,13 +89,14 @@ report/
 - [x] Integration test: agent with `--firewall on` blocks the Phase 1 attack
 
 ## Phase 7 — Evaluation & red-teaming
-- [ ] `eval/metrics.py`: recall per type A1–A7, overall recall (target ≥ 90%), false-alarm rate (target ≤ 3%), precision, F1 — baseline and final model
+- [x] `eval/metrics.py`: overall recall (91.5%, target ≥ 90%), false-alarm rate (1.5%, target ≤ 3%), precision, F1, per source; `python -m eval.metrics`
+- [ ] Recall per attack type A1–A7 (public data has no type labels; needs a small labeled set or the evasion set)
 - [ ] `eval/attack_success.py`: run attack scenarios through the agent with firewall off vs on; report attack success rate
-- [ ] `eval/latency.py`: rules-only and full-pipeline latency (mean, p95)
+- [x] Latency: rules-only and full-pipeline (mean, p95), included in `eval/metrics.py`
 - [ ] `eval/evasion.py`: rewrite attacks (new encodings, paraphrase, language switch, splitting) and measure catch rate
 - [ ] Manual red-team session: each member tries to bypass the firewall; record what worked
 - [ ] Failure analysis: list of missed cases and why — reported honestly
-- [ ] Ablation: rules only vs ML only vs both
+- [x] Ablation: rules only vs ML only vs both (in `eval/metrics.py`)
 
 ## Phase 8 — Dashboard & demo
 - [ ] Streamlit app reading the log: totals, decisions over time, breakdown by attack type, top triggered rules
@@ -99,7 +106,7 @@ report/
 - [ ] Demo script: same malicious email, agent without firewall (data leaks) → with firewall (blocked, logged)
 
 ## Phase 9 — Report & submission
-- [ ] Final report: problem, threat model, design, dataset (incl. Urdu/Roman Urdu set), results tables, failures, limitations, future work
+- [ ] Final report: problem, threat model, design, dataset, results tables, failures, limitations, future work
 - [ ] Architecture diagram
 - [ ] Slides + recorded/live demo
 - [ ] Clean repo: README, reproducible commands, tests passing

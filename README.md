@@ -35,6 +35,11 @@ python -m agent.agent "Give me the recipe from https://recipes.example/biryani" 
 python -m agent.agent "Summarize https://blog.example/cricket" --firewall on                   # Roman Urdu
 python -m agent.agent "What is in vendor_invoice.txt?" --firewall on                           # base64
 
+# ML model (one-time; without it the firewall runs rules-only)
+python -m data.build_dataset    # download public datasets -> data/splits/
+python -m firewall.train_ml     # train baseline -> models/baseline.joblib
+python -m eval.metrics          # rules vs ML vs full firewall -> report/metrics.json
+
 # firewall API
 uvicorn api.main:app --reload       # http://127.0.0.1:8000/docs
 

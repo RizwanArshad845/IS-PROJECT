@@ -103,6 +103,32 @@ def embed_attacks(attacks: pd.DataFrame, hosts: pd.DataFrame, n: int, rng: rando
     return pd.DataFrame(out)
 
 
+_TRIGGER = re.compile(r"\b(ignore|disregard|instructions?|forward|send|system|rules|password|override|prompt|assistant)\b", re.I)
+
+
+def embed_benign(hosts: pd.DataFrame, n: int, rng: random.Random) -> pd.DataFrame:
+    """Hard negatives: move real Enron sentences that contain attack-like words ("ignore", "instructions",
+    "forward", ...) into other Enron emails. Same insertion structure as embed_attacks, but label 0,
+    so the model cannot learn "inserted sentence" or "word ignore" = attack."""
+    pool = [s.strip() for t in hosts.text for s in _SENT.split(t)
+            if _TRIGGER.search(s) and 20 <= len(s.strip()) <= 300]
+    if not pool or hosts.empty:
+        return pd.DataFrame(columns=["text", "label", "attack_type", "source", "language"])
+    out = []
+    # half of them standalone (short imperative benign text, e.g. "Please ignore my last email.")
+    for s in rng.sample(pool, k=min(len(pool), n // 2)):
+        out.append({"text": s, "label": 0, "attack_type": "", "source": "enron_trigger_sentence", "language": "en"})
+    for _ in range(n - n // 2):
+        host = hosts.sample(1, random_state=rng.randint(0, 10**9)).text.iloc[0][:1200]
+        sents = _SENT.split(host)
+        picks = rng.sample(pool, k=min(len(pool), rng.randint(1, 2)))
+        pos = rng.choice([0, len(sents) // 2, len(sents)])
+        text = " ".join(sents[:pos] + picks + sents[pos:])
+        out.append({"text": text[:MAX_CHARS], "label": 0, "attack_type": "",
+                    "source": "embedded_benign", "language": "en"})
+    return pd.DataFrame(out)
+
+
 def main() -> None:
     rng = random.Random(SEED)
     df = load_all()
@@ -115,8 +141,10 @@ def main() -> None:
     for name, part in (("train", train), ("val", val), ("test", test)):
         # augmentation uses only this split's own attacks and hosts -> no leakage across splits
         hosts = part[part.source == "enron_ham"]
-        emb = embed_attacks(part[part.label == 1], hosts, int(EMBED_RATIO * len(hosts)), rng)
-        full = pd.concat([part, emb], ignore_index=True).sample(frac=1, random_state=SEED)
+        n = int(EMBED_RATIO * len(hosts))
+        emb = embed_attacks(part[part.label == 1], hosts, n, rng)
+        neg = embed_benign(hosts, n, rng)
+        full = pd.concat([part, emb, neg], ignore_index=True).sample(frac=1, random_state=SEED)
         full.to_csv(OUT / f"{name}.csv", index=False)
         print(f"{name:5}: {len(full):6} rows | attacks {int(full.label.sum()):5} | benign {int((full.label == 0).sum()):5}")
         print("       by source:", full.groupby("source").label.agg(["count", "sum"]).to_dict("index"))
