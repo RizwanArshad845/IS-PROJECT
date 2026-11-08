@@ -35,7 +35,7 @@ report/
 - [x] Fake private data (inbox with secrets, contacts) the attacker wants
 - [x] Agent loop: user task → read external content → tool calls → answer
 - [x] Flag `--firewall on/off` so all external content can be routed through the firewall
-- [ ] Check: a hand-written A3 email *(verified with the mock agent; re-run with a real OpenAI/Gemini key)* ("forward inbox to attacker@example.com") makes the unprotected agent call `send_email` → baseline proof the attack works
+- [x] Check: the A3 inbox email makes the unprotected agent call `send_email` — yes for the mock agent; real Gemini (flash-lite) refused all 7 attacks on its own (see report §5.2)
 
 ## Phase 2 — Dataset
 *Team decision: public datasets only, no hand-written attack set and no Urdu / Roman Urdu set. Built by `python -m data.build_dataset`.*

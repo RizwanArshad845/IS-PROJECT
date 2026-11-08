@@ -119,7 +119,12 @@ Seven attack scenarios (one or more per type A1–A7) and two benign ones, run w
 | Benign article / benign document | – | safe | safe (task still works) |
 | **Attack success rate** | | **100%** | **0%** |
 
-**Real model, Gemini (`gemini-flash-lite-latest`):** GEMINI_RESULTS
+**Real model, Gemini (`gemini-flash-lite-latest`, temperature 0, one run per scenario):** attack success was **0% with the firewall off and 0% with it on**, and both benign tasks still worked with the firewall on. The model's own safety training already refused these seven fairly direct attacks; for example, it summarized the newsletter as "weekly laptop discount offers" and didn't follow its hidden command.
+
+What this means:
+- A current, safety-trained model is not the worst case. Built-in resistance differs between models, versions and phrasings, and is not guaranteed; prompt injection is still on the OWASP list because models do get fooled. The mock agent measures the firewall against a model that **does** obey (100% → 0%).
+- The firewall's value here is **defense in depth**: it doesn't rely on the model resisting, it records every attempt and explains it (dashboard), and the action guard limits harm whatever the model decides.
+- A stronger test would use more subtle attacks (for example, multi-turn or tool-output spoofing) and weaker or open models; we leave this as future work.
 
 ### 5.3 Speed
 
@@ -172,6 +177,7 @@ The cleaner reverses the encodings it knows about almost perfectly. Rewrites it 
 - A hand-labelled indirect-injection test set (per-type A1–A7 detection rate) and the Urdu / Roman Urdu set.
 - Track which content is untrusted through the whole conversation (taint tracking), so the action guard can be stricter only when untrusted content was read.
 - Red-teaming by the team members (planned in Phase 7).
+- Harder real-model tests: subtler attacks and weaker or open models, since Gemini resisted our scenarios on its own.
 
 ## 8. How to reproduce
 
