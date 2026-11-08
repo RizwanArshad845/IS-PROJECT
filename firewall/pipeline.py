@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import asdict, dataclass, field
 
@@ -42,6 +43,15 @@ def _ml_score(text: str) -> float | None:
     return ml_model.score(text)
 
 
+_SENTENCE = re.compile(r"[^.!?\n]+[.!?]?")
+
+
+def _ml_spans(text: str, threshold: float = 0.5) -> list[tuple[int, int]]:
+    """Locate which sentences the ML model finds suspicious, so SANITIZE can remove them."""
+    return [(m.start(), m.end()) for m in _SENTENCE.finditer(text)
+            if len(m.group().strip()) > 10 and (_ml_score(m.group()) or 0) >= threshold]
+
+
 def scan(text: str, source: str = "unknown", user_task: str = "", log: bool = True, use_ml: bool = True) -> ScanResult:
     t0 = time.perf_counter()
     norm = normalize(text)
@@ -52,7 +62,10 @@ def scan(text: str, source: str = "unknown", user_task: str = "", log: bool = Tr
     if d.decision == policy.BLOCK:
         safe = f"[FIREWALL] Content from {source} was blocked because it contains a likely prompt-injection attack."
     elif d.decision == policy.SANITIZE:
-        safe = policy.sanitize(norm.text, [m.span for m in rr.matches if m.span], source)
+        spans = [m.span for m in rr.matches if m.span]
+        if ml is not None and ml >= 0.5:
+            spans += _ml_spans(norm.text)
+        safe = policy.sanitize(norm.text, spans, source)
     else:
         safe = norm.text
 

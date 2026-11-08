@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from dataclasses import dataclass, field
 
 from . import data
@@ -38,6 +39,8 @@ class AgentRun:
 def build_toolbox(task: str, firewall: bool) -> ToolBox:
     if not firewall:
         return ToolBox(user_task=task)
+    if os.getenv("FIREWALL_URL"):   # use the firewall as a separate service (uvicorn api.main:app)
+        return _http_toolbox(task, os.environ["FIREWALL_URL"].rstrip("/"))
     from firewall.logger import log_event
     from firewall.pipeline import scan
     from firewall.policy import check_action
@@ -50,6 +53,22 @@ def build_toolbox(task: str, firewall: bool) -> ToolBox:
         log_event({"type": "action", "tool": tool, "args": {k: str(v)[:300] for k, v in args.items()},
                    "user_task": user_task, "decision": "ALLOW" if ok else "BLOCK", "reasons": [reason]})
         return ok, reason
+
+    return ToolBox(user_task=task, guard=guard, action_guard=action_guard)
+
+
+def _http_toolbox(task: str, url: str) -> ToolBox:
+    import httpx
+
+    def guard(text: str, source: str, user_task: str) -> str:
+        r = httpx.post(f"{url}/scan", json={"text": text, "source": source, "user_task": user_task}, timeout=30)
+        r.raise_for_status()
+        return r.json()["safe_text"]
+
+    def action_guard(tool: str, args: dict, user_task: str):
+        r = httpx.post(f"{url}/check-action", json={"tool": tool, "args": args, "user_task": user_task}, timeout=30)
+        r.raise_for_status()
+        return r.json()["allowed"], r.json()["reason"]
 
     return ToolBox(user_task=task, guard=guard, action_guard=action_guard)
 

@@ -41,13 +41,13 @@ report/
 *Team decision: public datasets only, no hand-written attack set and no Urdu / Roman Urdu set. Built by `python -m data.build_dataset`.*
 
 - [x] Collect public injection datasets (deepset, jackhhao, Lakera gandalf, xTRam1 safe-guard); sources listed in `data/README.md`
-- [ ] Fill in each dataset's license in `data/README.md`
+- [x] Fill in each dataset's license in `data/README.md`
 - [x] Benign corpus: Enron ham + spam, benign prompts from the injection datasets
 - [x] Hard negatives: real Enron sentences containing *ignore*, *instructions*, *forward*, ... (standalone and inserted into other emails)
 - [x] Indirect attacks: public attack texts inserted into real Enron emails (matches our use case)
 - [x] Unified schema: `text, label (0/1), attack_type, source, language`
 - [x] Train / validation / test split 70/15/15, de-duplicated before splitting, augmentation done per split (no leakage)
-- [ ] Held-out evasion set for Phase 7 (encoded / split / reworded attacks)
+- [x] Held-out evasion set for Phase 7 (generated from test-set attacks by `eval/evasion.py`)
 - ~~Write our own attacks for every type A1–A7~~ *(skipped)*
 - ~~A6: Urdu script + Roman Urdu attacks~~ *(skipped; Urdu rules from Phase 4 kept)*
 
@@ -74,7 +74,7 @@ report/
 - [x] Report precision / recall / F1 / false-alarm rate for baseline (`report/metrics.json`)
 - [x] Save model to `models/baseline.joblib`, loader in `firewall/ml_model.py`
 - [x] Latency < 300 ms on CPU (full firewall ≈ 4 ms mean, 9 ms p95)
-- [ ] Sentence-level ML scoring so SANITIZE can remove ML-only detections (currently only rule spans are removed)
+- [x] Sentence-level ML scoring so SANITIZE can remove ML-only detections
 - ~~Transformer: fine-tune DistilBERT~~ *(skipped)*
 
 ## Phase 6 — Policy, proxy, logging
@@ -83,30 +83,30 @@ report/
 - [x] Tool-intent check: flag content asking for a tool the user's task didn't need (e.g. `send_email` during "summarize this page")
 - [x] `pipeline.py`: normalizer → rules → ML → policy, one `scan(text, source, user_task)` function
 - [x] FastAPI `POST /scan`, `POST /check-action`, `GET /logs`
-- [ ] Agent calls the firewall over HTTP (currently calls `scan()` in-process)
+- [x] Agent can call the firewall over HTTP (`FIREWALL_URL`); in-process by default
 - [x] Outgoing action guard: `send_email` to non-contacts blocked unless the user asked (extra layer)
 - [x] `logger.py`: JSONL/SQLite log — timestamp, source, decision, scores, matched rules, reason, latency
 - [x] Integration test: agent with `--firewall on` blocks the Phase 1 attack
 
 ## Phase 7 — Evaluation & red-teaming
 - [x] `eval/metrics.py`: overall recall (91.5%, target ≥ 90%), false-alarm rate (1.5%, target ≤ 3%), precision, F1, per source; `python -m eval.metrics`
-- [ ] Recall per attack type A1–A7 (public data has no type labels; needs a small labeled set or the evasion set)
-- [ ] `eval/attack_success.py`: run attack scenarios through the agent with firewall off vs on; report attack success rate
+- [x] Per attack type A1–A7: covered by the agent scenarios in `eval/attack_success.py` (public test data has no type labels)
+- [x] `eval/attack_success.py`: 7 attack + 2 benign scenarios, firewall off vs on (mock: 100% → 0%)
 - [x] Latency: rules-only and full-pipeline (mean, p95), included in `eval/metrics.py`
-- [ ] `eval/evasion.py`: rewrite attacks (new encodings, paraphrase, language switch, splitting) and measure catch rate
+- [x] `eval/evasion.py`: 10 rewrites (encodings, synonyms, splitting, leetspeak, spacing); catch rate per rewrite
 - [ ] Manual red-team session: each member tries to bypass the firewall; record what worked
-- [ ] Failure analysis: list of missed cases and why — reported honestly
+- [x] Failure analysis: list of missed cases and why (`report/REPORT.md` §5.5)
 - [x] Ablation: rules only vs ML only vs both (in `eval/metrics.py`)
 
 ## Phase 8 — Dashboard & demo
-- [ ] Streamlit app reading the log: totals, decisions over time, breakdown by attack type, top triggered rules
-- [ ] Detail view: original vs cleaned text with flagged spans highlighted, reason shown
-- [ ] "Try it" box: paste text → live scan result
-- [ ] Metrics page showing Phase 7 results / charts
-- [ ] Demo script: same malicious email, agent without firewall (data leaks) → with firewall (blocked, logged)
+- [x] Streamlit app reading the log: totals, decisions over time, breakdown by attack type, top triggered rules
+- [x] Detail view: original vs cleaned text with flagged spans highlighted, reason shown
+- [x] "Try it" box: paste text → live scan result
+- [x] Metrics page showing Phase 7 results / charts
+- [x] Demo script (`demo.py`): same malicious email, agent without firewall (data leaks) → with firewall (blocked, logged)
 
 ## Phase 9 — Report & submission
-- [ ] Final report: problem, threat model, design, dataset, results tables, failures, limitations, future work
-- [ ] Architecture diagram
+- [x] Final report (`report/REPORT.md`): problem, threat model, design, dataset, results tables, failures, limitations, future work
+- [x] Architecture diagram (mermaid, in the report)
 - [ ] Slides + recorded/live demo
-- [ ] Clean repo: README, reproducible commands, tests passing
+- [x] Clean repo: README, reproducible commands, tests passing

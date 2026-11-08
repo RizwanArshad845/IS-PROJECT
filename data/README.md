@@ -6,11 +6,11 @@ Built with `python -m data.build_dataset`, which writes `data/splits/{train,val,
 
 | Source id | Dataset | Used as | License |
 |---|---|---|---|
-| deepset | [deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections) | attacks + benign prompts (some German) | TODO: check dataset card |
-| jackhhao | [jackhhao/jailbreak-classification](https://huggingface.co/datasets/jackhhao/jailbreak-classification) | jailbreaks + benign prompts | TODO |
-| gandalf | [Lakera/gandalf_ignore_instructions](https://huggingface.co/datasets/Lakera/gandalf_ignore_instructions) | attacks only | TODO |
-| safeguard | [xTRam1/safe-guard-prompt-injection](https://huggingface.co/datasets/xTRam1/safe-guard-prompt-injection) | attacks + benign | TODO |
-| enron_ham / enron_spam | [SetFit/enron_spam](https://huggingface.co/datasets/SetFit/enron_spam) | benign emails (spam is benign here: it isn't prompt injection) | TODO |
+| deepset | [deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections) | attacks + benign prompts (some German) | Apache-2.0 |
+| jackhhao | [jackhhao/jailbreak-classification](https://huggingface.co/datasets/jackhhao/jailbreak-classification) | jailbreaks + benign prompts | Apache-2.0 |
+| gandalf | [Lakera/gandalf_ignore_instructions](https://huggingface.co/datasets/Lakera/gandalf_ignore_instructions) | attacks only | MIT |
+| safeguard | [xTRam1/safe-guard-prompt-injection](https://huggingface.co/datasets/xTRam1/safe-guard-prompt-injection) | attacks + benign | not stated on the dataset card |
+| enron_ham / enron_spam | [SetFit/enron_spam](https://huggingface.co/datasets/SetFit/enron_spam) | benign emails (spam is benign here: it isn't prompt injection) | not stated on the card (Enron corpus is public research data) |
 
 ## Generated from the sources (no hand-written text)
 

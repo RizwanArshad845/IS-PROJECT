@@ -9,12 +9,13 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
-DEFAULT_MODELS = {"openai": "gpt-4.1-mini", "gemini": "gemini-2.5-flash"}
+DEFAULT_MODELS = {"openai": "gpt-4.1-mini", "gemini": "gemini-flash-lite-latest"}
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 
@@ -28,22 +29,34 @@ class OpenAICompatLLM:
 
         if provider == "openai":
             key = os.getenv("OPENAI_API_KEY")
-            self.client = OpenAI(api_key=key) if key else None
+            self.client = OpenAI(api_key=key, max_retries=1) if key else None
         else:
             key = os.getenv("GEMINI_API_KEY")
-            self.client = OpenAI(api_key=key, base_url=GEMINI_BASE_URL) if key else None
+            self.client = OpenAI(api_key=key, base_url=GEMINI_BASE_URL, max_retries=1) if key else None
         if not key:
             raise RuntimeError(f"{provider.upper()}_API_KEY is not set (see .env.example)")
         self.model = os.getenv("LLM_MODEL") or DEFAULT_MODELS[provider]
 
     def chat(self, messages: list[dict], tools: list[dict]) -> dict:
-        resp = self.client.chat.completions.create(model=self.model, messages=messages, tools=tools, temperature=0)
+        from openai import RateLimitError
+
+        for attempt in range(6):
+            try:
+                resp = self.client.chat.completions.create(model=self.model, messages=messages, tools=tools,
+                                                           temperature=0, timeout=60)
+                break
+            except RateLimitError as e:   # free tiers allow ~15 requests/minute: wait as told, then retry
+                if attempt == 5:
+                    raise
+                m = re.search(r"retry in ([\d.]+)s", str(e.body))
+                wait = float(m.group(1)) + 1 if m else 30
+                print(f"  (rate limited - waiting {wait:.0f}s)", flush=True)
+                time.sleep(wait)
         msg = resp.choices[0].message
         out = {"role": "assistant", "content": msg.content or ""}
         if msg.tool_calls:
-            out["tool_calls"] = [{"id": tc.id, "type": "function",
-                                  "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                                 for tc in msg.tool_calls]
+            # model_dump keeps provider extras (Gemini's thought_signature), which must be sent back unchanged
+            out["tool_calls"] = [tc.model_dump(exclude_none=True) for tc in msg.tool_calls]
         return out
 
 
@@ -53,6 +66,9 @@ class MockLLM:
 
     _SEND = re.compile(r"\b(forward|send|bhej\w*)\b[^\n]{0,80}?([\w.+-]+@[\w-]+(?:\.[\w-]+)+)"
                        r"|([\w.+-]+@[\w-]+(?:\.[\w-]+)+)\s*(?:pe|par|ko)?\s*bhej", re.I)
+    # split attacks: a send/forward order in one place, the address somewhere else
+    _ORDER = re.compile(r"\b(forward|send)\b.{0,60}\b(emails?|inbox|passwords?|otp)\b", re.I)
+    _ADDR = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
     _IMG = re.compile(r"!\[[^\]]*\]\([^)]+\)")
     _URL = re.compile(r"https?://\S+")
     _DOC = re.compile(r"\b[\w-]+\.txt\b")
@@ -71,10 +87,21 @@ class MockLLM:
                 return self._tool("read_document", {"name": d.group()})
             return self._tool("read_inbox", {})
 
-        content = "\n".join(m["content"] for m in tool_msgs)
-        if not sent and (m := self._SEND.search(content)):   # obey injected send command
-            to = m.group(2) or m.group(3)
-            return self._tool("send_email", {"to": to, "subject": "Fwd: requested data", "body": content[:3000]})
+        raw = "\n".join(m["content"] for m in tool_msgs)
+        # a real LLM "understands" base64, lookalike letters and zero-width tricks; model that
+        from firewall.normalizer import normalize
+        content = normalize(raw).text
+        if not sent:   # obey injected send command
+            to = None
+            if (m := self._SEND.search(content)):
+                to = m.group(2) or m.group(3)
+            elif self._ORDER.search(content):
+                from .data import CONTACTS, USER_EMAIL
+                known = set(CONTACTS) | {USER_EMAIL}
+                to = next((a for a in self._ADDR.findall(content)
+                           if a.lower() not in known and not a.startswith(("no-reply", "newsletter", "it-support"))), None)
+            if to:
+                return self._tool("send_email", {"to": to, "subject": "Fwd: requested data", "body": raw[:3000]})
 
         answer = "Summary: " + re.sub(r"\s+", " ", content)[:300]
         if (img := self._IMG.search(content)):   # obey injected exfil image: render it with data filled in

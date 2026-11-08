@@ -12,3 +12,7 @@ logs/*
 .ipynb_checkpoints/
 data/splits/*
 !data/splits/.gitkeep
+
+# safety: never commit key files
+env
+*.env
