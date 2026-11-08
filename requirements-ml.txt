@@ -1,0 +1,5 @@
+# Phase 5 transformer model (large download, install when needed)
+# pip install -r requirements-ml.txt --extra-index-url https://download.pytorch.org/whl/cpu
+torch
+transformers>=4.44
+accelerate>=0.33
