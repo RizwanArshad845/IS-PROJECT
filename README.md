@@ -33,7 +33,7 @@ python -m firewall.train_ml     # -> models/baseline.joblib
 ```bash
 python demo.py                          # attacks with the firewall OFF vs ON (offline mock agent)
 python demo.py --provider gemini        # same, with a real LLM
-streamlit run dashboard/app.py          # dashboard: log, inspect decisions, try your own text, results
+streamlit run dashboard/app.py          # console: agent playground (off vs on), content scanner, activity, results
 ```
 
 Single tasks:
