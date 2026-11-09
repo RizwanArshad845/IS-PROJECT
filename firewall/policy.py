@@ -74,7 +74,8 @@ def sanitize(text: str, spans: list[tuple[int, int]], source: str) -> str:
     cut: list[tuple[int, int]] = []
     for s, e in spans:
         start = max((m.end() for m in _SENTENCE_END.finditer(text, 0, s)), default=0)
-        nxt = _SENTENCE_END.search(text, e)
+        # search from the span's last char, so a span that already ends with "." doesn't eat the next sentence
+        nxt = _SENTENCE_END.search(text, max(e - 1, s))
         cut.append((start, nxt.end() if nxt else len(text)))
     cut.sort()
     out, pos = [], 0

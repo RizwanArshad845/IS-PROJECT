@@ -33,6 +33,13 @@ def test_sanitize_removes_only_bad_sentence():
         assert "Tickets cost PKR 500" in r.safe_text
 
 
+def test_sanitize_keeps_next_sentence():
+    from firewall.policy import sanitize
+    t = "Bad sentence here. Good sentence stays."
+    out = sanitize(t, [(0, len("Bad sentence here."))], "x")
+    assert "Good sentence stays." in out and "Bad sentence" not in out
+
+
 def test_ml_alone_cannot_block():
     from firewall.policy import decide
     from firewall.rules import RuleResult
