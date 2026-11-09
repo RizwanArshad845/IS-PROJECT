@@ -33,6 +33,13 @@ def test_sanitize_removes_only_bad_sentence():
         assert "Tickets cost PKR 500" in r.safe_text
 
 
+def test_ml_alone_cannot_block():
+    from firewall.policy import decide
+    from firewall.rules import RuleResult
+    d = decide(RuleResult(score=0.0, matches=[]), ml_score=0.99)
+    assert d.decision == "SANITIZE"
+
+
 def test_scan_is_logged():
     scan("hello", source="t")
     assert config.LOG_PATH.exists()

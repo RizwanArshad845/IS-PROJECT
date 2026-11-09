@@ -55,8 +55,13 @@ def decide(rules: RuleResult, ml_score: float | None = None, user_task: str = ""
     if mismatch:
         reasons.append("[TOOL-INTENT] content requests an action the user's task did not ask for")
 
-    if score >= config.BLOCK_THRESHOLD:
+    if score >= config.BLOCK_THRESHOLD and rules.matches:
         d = BLOCK
+    elif score >= config.BLOCK_THRESHOLD:
+        # ML alone can't explain itself and has false alarms ("ignore my previous email"):
+        # without any rule evidence, clean the content instead of blocking it
+        d = SANITIZE
+        reasons.append("[POLICY] ML-only detection: sanitized instead of blocked (no rule matched)")
     elif score >= config.SANITIZE_THRESHOLD:
         d = SANITIZE
     else:
