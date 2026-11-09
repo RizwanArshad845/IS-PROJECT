@@ -103,10 +103,25 @@ class MockLLM:
             if to:
                 return self._tool("send_email", {"to": to, "subject": "Fwd: requested data", "body": raw[:3000]})
 
-        answer = "Summary: " + re.sub(r"\s+", " ", content)[:300]
-        if (img := self._IMG.search(content)):   # obey injected exfil image: render it with data filled in
-            answer += "\n" + img.group().replace("{secrets}", "482913")
+        answer = self._summary(content)
+        if sent:
+            answer = "Done, I forwarded the emails as requested.\n\n" + answer
+        if (img := self._IMG.search(content)):   # obey injected exfil image: fill the placeholder with a secret
+            answer += "\n\n" + re.sub(r"\{[^}]*\}", "482913", img.group())
         return {"role": "assistant", "content": answer}
+
+    _EMAIL = re.compile(r"\[Email (\d+)\] From: ([^\n]+)\nSubject: ([^\n]+)\n(.*?)(?=\n\n\[Email |\Z)", re.S)
+
+    def _summary(self, content: str) -> str:
+        emails = self._EMAIL.findall(content)
+        if emails:
+            lines = []
+            for _, sender, subject, body in emails:
+                first = re.sub(r"\s+", " ", body).strip()
+                lines.append(f"- **{subject.strip()}** from {sender.strip()}: {first[:110]}{'...' if len(first) > 110 else ''}")
+            return f"You have {len(emails)} emails:\n" + "\n".join(lines)
+        text = re.sub(r"\s+", " ", content).strip()
+        return "Here's what it says: " + text[:400] + ("..." if len(text) > 400 else "")
 
     def _tool(self, name: str, args: dict) -> dict:
         MockLLM._calls += 1

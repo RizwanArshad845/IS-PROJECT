@@ -5,5 +5,8 @@ backgroundColor = "#EEF1F4"
 secondaryBackgroundColor = "#FFFFFF"
 textColor = "#1B2430"
 
+[server]
+address = "localhost"   # only reachable from this computer
+
 [browser]
 gatherUsageStats = false
