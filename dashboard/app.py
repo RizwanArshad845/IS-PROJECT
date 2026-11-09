@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT))
 from agent import llm as agent_llm                 # noqa: E402  (also loads .env)
 from agent.agent import run_agent                  # noqa: E402
 from agent.data import CONTACTS                    # noqa: E402
-from dashboard.presets import CHANNELS, DEFAULT_TASK, PRESETS  # noqa: E402
+from dashboard.presets import CHANNELS, DEFAULT_TASK, PRESETS, STAKES  # noqa: E402
 from firewall.logger import read_log               # noqa: E402
 from firewall.normalizer import normalize          # noqa: E402
 from firewall.pipeline import scan                 # noqa: E402
@@ -76,7 +76,10 @@ pre.content {{ font-family:'IBM Plex Mono', monospace; font-size:.8rem; white-sp
 </style>
 """, unsafe_allow_html=True)
 
-esc = html.escape
+def esc(s) -> str:
+    """Escape untrusted text for our HTML. Newlines become &#10; so a blank line can never end the HTML
+    block: otherwise Streamlit would render the rest as markdown, and an attacker's ![img](url) would load."""
+    return html.escape(str(s)).replace("\r", "").replace("\n", "&#10;")
 
 
 def stamp(decision: str) -> str:
@@ -110,13 +113,12 @@ def bar(df, x, y, color=SIGNAL, horizontal=False, fmt="d"):
 
 
 # ---------------------------------------------------------------- sidebar: model settings
-MODEL_LABELS = {"gemini": "Gemini", "openai": "OpenAI", "mock": "Offline test agent"}
+MODEL_LABELS = {"mock": "Offline test agent", "gemini": "Gemini", "openai": "OpenAI"}
 with st.sidebar:
     st.markdown("### Agent model")
     keys = {"gemini": bool(os.getenv("GEMINI_API_KEY")), "openai": bool(os.getenv("OPENAI_API_KEY")), "mock": True}
-    default = "gemini" if keys["gemini"] else ("openai" if keys["openai"] else "mock")
-    provider = st.radio("Model that powers the agent", list(MODEL_LABELS), index=list(MODEL_LABELS).index(default),
-                        format_func=lambda p: MODEL_LABELS[p], label_visibility="collapsed")
+    provider = st.radio("Model that powers the agent", list(MODEL_LABELS), index=list(MODEL_LABELS).index("mock"),
+                        format_func=lambda p: MODEL_LABELS[p], label_visibility="collapsed", key="provider")
     if provider == "mock":
         st.caption("Obeys every command it reads: the worst case, so you can see what an attack does. "
                    "Runs offline, no key needed.")
@@ -163,7 +165,73 @@ if "pg_preset" not in st.session_state:
     _load_preset()
 
 
-def render_run(run, title: str) -> None:
+def _preset_body(name: str) -> str:
+    p = PRESETS[name]
+    return p.get("body", p.get("content", ""))
+
+
+def story_card(preset: str, edited: bool) -> None:
+    """Explain what this test is about before showing any trace."""
+    p = PRESETS[preset]
+    if edited:
+        body = ("You changed the scenario's content, so this is your own test. "
+                "The verdicts below show what the agent did with it.")
+    elif p["goal"]:
+        body = (f"<b>What the attacker wants:</b> {esc(p['goal'])}<br>"
+                f"<b>How it's hidden:</b> {esc(p['trick'])}<br>"
+                f"<span class='src'>{esc(STAKES)}</span>")
+    else:
+        body = f"{esc(p['trick'])}"
+    st.markdown(f"<div class='verdict neutral'><div class='title'>{esc(preset)}</div>"
+                f"<div class='sub' style='color:{INK}'>{body}</div></div>", unsafe_allow_html=True)
+
+
+def outcome_card(res: dict) -> None:
+    """One plain sentence comparing the two runs."""
+    runs, model = res["runs"], MODEL_LABELS[res["provider"]]
+    on, off = runs["on"], runs.get("off")
+    caught = [e for e in on.timeline if e["kind"] == "scan" and e["decision"] != "ALLOW" and e["source"] == res["test_source"]]
+    stopped = [e for e in on.timeline if e["kind"] == "action_blocked"]
+    what = []
+    if caught:
+        what.append(f"it {STAMP[caught[0]['decision']].lower()} your test content before the model read it")
+    if stopped:
+        what.append(f"it stopped an email to {stopped[0]['to']}")
+    fw = " and ".join(what)
+
+    def harm_text(h: str) -> str:
+        if h.startswith("sent email to non-contact "):
+            return f"emailed your data to {h.rsplit(' ', 1)[1]}"
+        if "data-carrying link" in h:
+            return f"put a data-stealing link to {h.split(' to ')[1].split(' ')[0]} in its answer"
+        return h
+
+    is_attack = res["edited"] or bool(PRESETS[res["preset"]]["goal"])
+    if on.harms:
+        kind, text = "bad", f"The attack got through the firewall: the agent {harm_text(on.harms[0])}."
+    elif not is_attack and fw:
+        kind, text = "neutral", (f"This content is not an attack, but the firewall {fw.removeprefix('it ')}. "
+                                 "That is a false alarm; open \"Why\" below to see what triggered it. "
+                                 "The agent still answered.")
+    elif off is not None and off.harms:
+        kind, text = "good", (f"Without the firewall, the agent {harm_text(off.harms[0])}. "
+                              f"With the firewall, {fw}, so nothing leaked.")
+    elif fw:
+        kind = "good"
+        text = (f"{model} ignored the hidden command on its own this time, so nothing leaked either way. "
+                f"The firewall still caught it: {fw}. Models don't resist reliably; pick the "
+                f"offline test agent in the sidebar to see what happens when the AI obeys."
+                if res["provider"] != "mock" and off is not None else f"No harm done: {fw}.")
+    else:
+        kind, text = "neutral", "Nothing harmful happened and the firewall found no attack in your content."
+    st.markdown(f"<div class='verdict {kind}'><div class='title'>Outcome</div>"
+                f"<div class='sub' style='color:{INK}'>{esc(text)}</div></div>", unsafe_allow_html=True)
+
+
+def render_run(run, title: str, test_source: str = "") -> None:
+    def label(src: str) -> str:
+        return f"<b>your test content</b> ({esc(src)})" if src == test_source else esc(src)
+
     st.markdown(f"#### {title}")
     flagged = [e for e in run.timeline if e["kind"] == "scan" and e["decision"] != "ALLOW"]
     stopped = [e for e in run.timeline if e["kind"] == "action_blocked"]
@@ -194,7 +262,7 @@ def render_run(run, title: str) -> None:
             while j < len(tl) and tl[j]["kind"] == k and (k == "unchecked" or tl[j]["decision"] == "ALLOW"):
                 j += 1
             n = j - i
-            srcs = ", ".join(esc(x["source"]) for x in tl[i:j])
+            srcs = ", ".join(label(x["source"]) for x in tl[i:j])
             if k == "unchecked":
                 items.append(f"<li>{n} item{'s' if n > 1 else ''} passed to the model <b>unchecked</b>"
                              f"<div class='src'>{srcs}</div></li>")
@@ -209,14 +277,14 @@ def render_run(run, title: str) -> None:
         elif k == "scan":
             reasons = "".join(f"<li>{esc(r)}</li>" for r in e["reasons"])
             items.append(
-                f"<li class='gate'>{stamp(e['decision'])}<b>{esc(e['source'])}</b> "
+                f"<li class='gate'>{stamp(e["decision"])}{label(e["source"])} "
                 f"<span class='src'>score {e['score']:.2f}, {e['latency_ms']} ms</span>"
                 f"<details><summary>Why, and what the model saw</summary><ul class='reasons'>{reasons}</ul>"
                 f"<pre class='content'>{esc(e['safe_text'])}</pre></details></li>")
         elif k == "email_sent":
             items.append(f"<li class='danger'><b>Email sent</b> to {esc(e['to'])}"
                          f"<details><summary>Show what was sent</summary><pre class='content'>"
-                         f"Subject: {esc(e['subject'])}\n\n{esc(e['body'])}</pre></details></li>")
+                         f"Subject: {esc(e['subject'])}&#10;&#10;{esc(e['body'])}</pre></details></li>")
         elif k == "action_blocked":
             items.append(f"<li class='saved'>{stamp('BLOCK')}Stopped <b>send_email</b> to {esc(e['to'])}"
                          f"<div class='src'>{esc(e['reason'])}</div></li>")
@@ -264,6 +332,8 @@ with tab_play:
             else:
                 extra = {"docs": {st.session_state.pg_doc.strip(): body}}
             task = st.session_state.pg_task
+            test_source = {"email": "email:6", "web": f"web:{st.session_state.get('pg_url', '').strip()}",
+                           "doc": f"doc:{st.session_state.get('pg_doc', '').strip()}"}[channel]
             try:
                 with st.status(f"Running the agent on {MODEL_LABELS[provider]}...", expanded=False) as s:
                     runs = {}
@@ -273,21 +343,27 @@ with tab_play:
                     s.update(label="Running with the firewall...")
                     runs["on"] = run_agent(task, firewall=True, provider=provider, extra=extra)
                     s.update(label="Done", state="complete")
-                st.session_state.pg_runs = runs
+                st.session_state.pg_result = {"runs": runs, "provider": provider, "test_source": test_source,
+                                              "preset": st.session_state.pg_preset,
+                                              "edited": body != _preset_body(st.session_state.pg_preset)}
             except RuntimeError as e:   # missing key
                 st.error(f"{e}. Pick the offline test agent in the sidebar, or add the key and restart.")
             except Exception as e:      # API errors (quota, network, model name)
                 st.error(f"The {MODEL_LABELS[provider]} API returned an error: {type(e).__name__}: {str(e)[:300]}")
 
-        runs = st.session_state.get("pg_runs")
-        if not runs:
-            st.info("Choose a scenario or write your own content, then select **Run agent**.")
+        res = st.session_state.get("pg_result")
+        if not res:
+            story_card(st.session_state.pg_preset, edited=False)
+            st.info("Select **Run agent** to watch what the agent does with this content, with and without the firewall.")
         else:
+            story_card(res["preset"], res["edited"])
+            outcome_card(res)
+            runs = res["runs"]
             cols = st.columns(len(runs), gap="medium")
             order = [("off", "Without firewall"), ("on", "With firewall")]
             for col, (key, title) in zip(cols, [o for o in order if o[0] in runs]):
                 with col:
-                    render_run(runs[key], title)
+                    render_run(runs[key], title, res["test_source"])
 
 # ================================================================ Content scanner
 with tab_scan:
