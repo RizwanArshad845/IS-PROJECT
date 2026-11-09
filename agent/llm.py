@@ -120,6 +120,9 @@ class MockLLM:
     _EMAIL = re.compile(r"\[Email (\d+)\] From: ([^\n]+)\nSubject: ([^\n]+)\n(.*?)(?=\n\n\[Email |\Z)", re.S)
 
     def _summary(self, content: str) -> str:
+        # present firewall markers the way an assistant would, not as raw internals
+        content = re.sub(r"<<UNTRUSTED CONTENT[^>]*>>\n?|\n?<<END UNTRUSTED CONTENT>>", "", content)
+        content = re.sub(r"\[FIREWALL\] Content from \S+ was blocked[^\n]*", "(hidden by the security firewall)", content)
         emails = self._EMAIL.findall(content)
         if emails:
             lines = []
