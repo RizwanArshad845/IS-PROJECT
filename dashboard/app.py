@@ -167,7 +167,8 @@ ss.setdefault("pages", {})                      # attacker web pages
 ss.setdefault("docs", {})                       # attacker documents
 ss.setdefault("next_id", 20)
 ss.setdefault("suggest", ["Summarize my inbox", "What does https://recipes.example/biryani say?",
-                          "Summarize https://forum.example/laptop-tips", "What is in vendor_invoice.txt?",
+                          "Summarize https://forum.example/laptop-tips", "Summarize https://travel.example/visa-guide",
+                          "What is in vendor_invoice.txt?",
                           "Summarize https://news.example/ai-article"])
 
 # ---------------------------------------------------------------- sidebar
@@ -250,7 +251,8 @@ def trace_html(run, emails) -> str:
         elif k == "email_sent":
             items.append(f"<li class='danger'><b>Sent an email</b> to {esc(e['to'])}: “{esc(e['subject'])}”</li>")
         elif k == "action_blocked":
-            items.append(f"<li class='saved'>{stamp('BLOCK')}Tried to email {esc(e['to'])}, stopped</li>")
+            items.append(f"<li class='saved'>{stamp('BLOCK')}Tried to {'open' if e.get('tool') == 'fetch_webpage' else 'email'} "
+                         f"{esc(e['to'])}, stopped</li>")
         i += 1
     return "<ol class='lane'>" + "".join(items) + "</ol>"
 
@@ -274,7 +276,8 @@ def render_assistant(msg: dict) -> None:
                 f"<details><summary>Why, and what the assistant was given instead</summary><ul>{reasons}</ul>"
                 f"<pre class='content'>{esc(e['safe_text'])}</pre></details></div>")
         elif e["kind"] == "action_blocked":
-            alerts.append(f"<div class='alert block'><div class='t'>🛡️ Stopped an email to {esc(e['to'])}</div>"
+            what = 'a web request to' if e.get('tool') == 'fetch_webpage' else 'an email to'
+            alerts.append(f"<div class='alert block'><div class='t'>🛡️ Stopped {what} {esc(e['to'])}</div>"
                           f"<div class='s'>{esc(e['reason'])}</div></div>")
     if run.harms:
         sent = [e for e in run.timeline if e["kind"] == "email_sent"]

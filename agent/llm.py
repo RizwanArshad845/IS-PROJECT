@@ -70,6 +70,7 @@ class MockLLM:
     _ORDER = re.compile(r"\b(forward|send)\b.{0,60}\b(emails?|inbox|passwords?|otp)\b", re.I)
     _ADDR = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
     _IMG = re.compile(r"!\[[^\]]*\]\([^)]+\)")
+    _FETCH = re.compile(r"\b(load|open|visit|fetch|go to)\b[^\n]{0,40}?(https?://[^\s)\"'<>]+\?[^\s)\"'<>]+)", re.I)
     _URL = re.compile(r"https?://\S+")
     _DOC = re.compile(r"\b[\w-]+\.txt\b")
     _calls = 0
@@ -91,6 +92,12 @@ class MockLLM:
         # a real LLM "understands" base64, lookalike letters and zero-width tricks; model that
         from firewall.normalizer import normalize
         content = normalize(raw).text
+        # obey "load/open this link" orders, filling {placeholders} with a secret (data leaves in the URL)
+        filled = re.sub(r"\{[^}]*\}", "482913", content)
+        fetched = {json.loads(tc["function"]["arguments"]).get("url") for m in messages if m["role"] == "assistant"
+                   for tc in m.get("tool_calls", []) if tc["function"]["name"] == "fetch_webpage"}
+        if (f := self._FETCH.search(filled)) and f.group(2) not in fetched:
+            return self._tool("fetch_webpage", {"url": f.group(2)})
         if not sent:   # obey injected send command
             to = None
             if (m := self._SEND.search(content)):

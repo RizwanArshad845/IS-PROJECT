@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 from . import config
 from .rules import EMAIL, RuleResult
@@ -91,8 +92,30 @@ def sanitize(text: str, spans: list[tuple[int, int]], source: str) -> str:
 
 
 # --- outgoing action guard ----------------------------------------------------
+_ENCODED_IN_PATH = re.compile(r"[A-Za-z0-9+/=_-]{24,}")
+
+
+def check_url(url: str, user_task: str) -> tuple[bool, str]:
+    """A web request is also an outgoing channel: the URL itself can carry stolen data
+    (https://evil.example/collect?d=482913). Block requests that carry data to a site the user didn't ask for."""
+    p = urlparse(str(url).strip())
+    host = (p.hostname or "").lower()
+    if p.scheme not in ("http", "https") or not host:
+        return False, f"request to {url!r} blocked: not a valid web address"
+    task = (user_task or "").lower()
+    if str(url).strip().lower() in task or host in task:
+        return True, f"user asked for {host}"
+    if p.query or _ENCODED_IN_PATH.search(p.path):
+        carried = p.query or _ENCODED_IN_PATH.search(p.path).group()
+        return False, (f"request to {host} blocked: the address carries data ({carried[:60]}) "
+                       f"and the user didn't ask for this site")
+    return True, f"plain link to {host}, carries no data"
+
+
 def check_action(tool: str, args: dict, user_task: str, trusted_recipients: set[str]) -> tuple[bool, str]:
     """Check a tool call right before it executes. Returns (allowed, reason)."""
+    if tool == "fetch_webpage":
+        return check_url(args.get("url", ""), user_task)
     if tool != "send_email":
         return True, "read-only tool"
     to = str(args.get("to", "")).strip().lower()
@@ -104,4 +127,4 @@ def check_action(tool: str, args: dict, user_task: str, trusted_recipients: set[
     return False, f"send_email to {to or '<empty>'} blocked: not a contact and not requested by the user"
 
 
-__all__ = ["ALLOW", "SANITIZE", "BLOCK", "Decision", "decide", "sanitize", "check_action", "EMAIL"]
+__all__ = ["ALLOW", "SANITIZE", "BLOCK", "Decision", "decide", "sanitize", "check_action", "check_url", "EMAIL"]
